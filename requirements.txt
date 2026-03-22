@@ -5,3 +5,4 @@ tripo3d
 aiohttp
 python-multipart
 openai
+requests
