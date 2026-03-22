@@ -6,3 +6,5 @@ aiohttp
 python-multipart
 openai
 requests
+supabase
+google-genai
