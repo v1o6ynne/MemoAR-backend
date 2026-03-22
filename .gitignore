@@ -1,0 +1,11 @@
+.env
+__pycache__
+
+ARItems/__pycache__
+Memories/__pycache__
+Prompts/__pycache__
+Routes/__pycache__
+Stories/__pycache__
+Utils/__pycache__
+
+Storage

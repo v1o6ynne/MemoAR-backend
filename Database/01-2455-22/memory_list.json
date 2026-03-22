@@ -1,0 +1,17 @@
+[
+  {
+    "id": "2DF7F452-533F-409C-9E30-44049506D718",
+    "userImagePath": "Storage/P01/images/2DF7F452-533F-409C-9E30-44049506D718.jpg",
+    "modelImagePath": "Storage/P01/modelImages/2DF7F452-533F-409C-9E30-44049506D718.jpg",
+    "arPath": "Storage/P01/ARitem/2DF7F452-533F-409C-9E30-44049506D718.usdz",
+    "description": "A pink flower I saw on campus in the afternoon.",
+    "timestamp": "2026-03-20T15:30:00",
+    "location": "Georgia Tech",
+    "labels": {
+      "time": "afternoon",
+      "weather": "sunny",
+      "emotion": "calm",
+      "scene": "campus"
+    }
+  }
+]

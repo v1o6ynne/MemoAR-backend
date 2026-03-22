@@ -1,0 +1,5 @@
+{
+    "time" : ["Morning", "Noon", "Afternoon", "Evening"],
+    "location":["John Lewis Student Center", "Clough Commons", "Campus Recreation Center", "Exibition Hall"],
+    "category": ["Work", "Family", "Dance", "Food","Drinks", "Sports"]
+}
