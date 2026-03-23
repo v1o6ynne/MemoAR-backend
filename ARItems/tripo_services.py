@@ -27,77 +27,67 @@ TRIPO_TASK_URL = "https://api.tripo3d.ai/v2/openapi/task"
 
 async def generate_model_from_image(
     image_path: str,
-    output_usdz_path: str,
+    output_usdz_path: str = "", 
     orientation: str = "align_image",
+    user_id: str = "default_user",
+    file_name: str = "model.usdz"
 ):
     """
-    Read an image from image_path, generate 3D model with Tripo,
-    convert it to USDZ, save it to output_usdz_path, rotate it,
-    and also render a transparent PNG poster at the same basename.
-    Final return value still stays the USDZ path.
+    生成 3D 模型并上传至 Supabase
     """
-
+    # 1. 路径处理：在 Railway 上使用 /tmp 目录最安全
     input_path = Path(image_path)
-    if not input_path.exists():
+    # 如果 input_path 是远程 URL，TripoClient 会处理；如果是本地路径，需检查
+    if not str(image_path).startswith("http") and not input_path.exists():
         raise FileNotFoundError(f"Input image not found: {image_path}")
 
-    output_path = Path(output_usdz_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    tmp_dir = output_path.parent / f"tmp_{output_path.stem}"
+    # 定义临时工作目录
+    working_dir = Path("/tmp/tripo_work")
+    working_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = working_dir / f"task_{user_id}_{os.getpid()}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     async with TripoClient() as client:
         # Step 1: image -> base model
         task_id = await client.image_to_model(
-            image=str(input_path),
+            image=str(image_path), # Tripo 支持直接传 URL
             orientation=orientation,
         )
 
         task = await client.wait_for_task(task_id, verbose=True)
-
         if task.status != TaskStatus.SUCCESS:
             raise RuntimeError(f"Image-to-model task failed: {task.status}")
 
         # Step 2: convert -> USDZ
         convert_task_id = _submit_convert_task(task_id)
-
         convert_task = await client.wait_for_task(convert_task_id, verbose=True)
-
         if convert_task.status != TaskStatus.SUCCESS:
             raise RuntimeError(f"Convert-to-USDZ task failed: {convert_task.status}")
 
         # Step 3: download converted model
         files = await client.download_task_models(convert_task, str(tmp_dir))
 
+    # 2. 找到下载好的本地文件
     usdz_file = _find_usdz_file(files, tmp_dir)
     if usdz_file is None:
-        raise RuntimeError(f"No USDZ file found in converted output: {files}")
+        raise RuntimeError(f"No USDZ file found in output: {files}")
 
-    if output_path.exists():
-        output_path.unlink()
+    # --- 这里跳过 Step 4 & 5 (旋转和海报)，因为 Linux 跑不动你的 Swift Tool ---
 
-    shutil.move(str(usdz_file), str(output_path))
+    # 3. 执行上传 (传入 user_id 和 file_name)
+    print(f"Uploading to Supabase: {file_name} for user {user_id}")
+    remote_url = _upload_to_supabase(
+        local_path=usdz_file, 
+        content_type="model/vnd.usdz+zip",
+        user_id=user_id,
+        file_name=file_name
+    )
 
-    # Step 4: rotate and overwrite same final path
-    # _rotate_usdz_overwrite(
-    #     output_path,
-    #     deg1=-90,
-    #     axis1="x",
-    #     deg2=-90,
-    #     axis2="y",
-    # )
-
-    # Step 5: render transparent PNG poster with same basename
-    # poster_path = output_path.with_suffix(".png")
-    # _render_usdz_poster(output_path, poster_path)
-
-    #直接上传
-    remote_url = _upload_to_supabase(raw_usdz, "model/vnd.usdz+zip")
-
+    # 4. 清理现场
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    return str(output_path)
+    # 5. 返回 Supabase 的公网 URL 供前端下载
+    return remote_url
 
 
 def _submit_convert_task(original_model_task_id: str) -> str:
@@ -251,35 +241,29 @@ def _render_usdz_poster(usdz_path: Path, poster_path: Path):
     if not poster_path.exists():
         raise RuntimeError(f"Poster PNG not produced: {poster_path}")
     
-def _upload_to_supabase(local_path: Path, content_type: str) -> str:
+def _upload_to_supabase(local_path: Path, content_type: str, user_id: str, file_name: str) -> str:
     """
-    将本地文件上传到 Supabase Storage 并返回公开访问的 URL
+    将本地文件上传到 Supabase Storage，并根据 user_id 分类存储
     """
-    # 1. 检查环境变量是否读取成功
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
     
     if not url or not key:
         raise ValueError("未在环境变量中找到 SUPABASE_URL 或 SUPABASE_KEY")
 
-    # 2. 初始化 Supabase Client (如果之前没在全局定义)
     from supabase import create_client
     supabase_client = create_client(url, key)
 
-    # 3. 准备上传路径
-    # 建议按照用户 ID 分文件夹，或者直接存入生成的文件夹
-    file_name = local_path.name
-    storage_path = f"models/{file_name}" # 存放在桶内的 models 文件夹下
+    # --- 关键修改：使用传入的 user_id 和 file_name 构建路径 ---
+    # 路径格式：models/用户ID/文件名.usdz
+    storage_path = f"{user_id}/{file_name}" 
 
-    # 4. 执行上传
     with open(local_path, "rb") as f:
-        # upsert=True 表示如果文件名重复则覆盖
         supabase_client.storage.from_("models").upload(
             path=storage_path,
             file=f,
             file_options={"content-type": content_type, "upsert": "true"}
         )
 
-    # 5. 获取公网下载链接
     public_url = supabase_client.storage.from_("models").get_public_url(storage_path)
     return public_url
