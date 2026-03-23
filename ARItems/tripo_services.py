@@ -10,6 +10,15 @@ import requests
 from tripo3d import TripoClient
 from tripo3d.models import TaskStatus
 
+from supabase import create_client, Client
+
+# 获取环境变量
+url: str = os.environ.get("SUPABASE_URL", "")
+key: str = os.environ.get("SUPABASE_KEY", "")
+
+# 初始化
+supabase: Client = create_client(url, key)
+
 
 TRIPO_TASK_URL = "https://api.tripo3d.ai/v2/openapi/task"
 
@@ -71,17 +80,20 @@ async def generate_model_from_image(
     shutil.move(str(usdz_file), str(output_path))
 
     # Step 4: rotate and overwrite same final path
-    _rotate_usdz_overwrite(
-        output_path,
-        deg1=-90,
-        axis1="x",
-        deg2=-90,
-        axis2="y",
-    )
+    # _rotate_usdz_overwrite(
+    #     output_path,
+    #     deg1=-90,
+    #     axis1="x",
+    #     deg2=-90,
+    #     axis2="y",
+    # )
 
     # Step 5: render transparent PNG poster with same basename
-    poster_path = output_path.with_suffix(".png")
-    _render_usdz_poster(output_path, poster_path)
+    # poster_path = output_path.with_suffix(".png")
+    # _render_usdz_poster(output_path, poster_path)
+
+    #直接上传
+    remote_url = _upload_to_supabase(raw_usdz, "model/vnd.usdz+zip")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -238,3 +250,36 @@ def _render_usdz_poster(usdz_path: Path, poster_path: Path):
 
     if not poster_path.exists():
         raise RuntimeError(f"Poster PNG not produced: {poster_path}")
+    
+def _upload_to_supabase(local_path: Path, content_type: str) -> str:
+    """
+    将本地文件上传到 Supabase Storage 并返回公开访问的 URL
+    """
+    # 1. 检查环境变量是否读取成功
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+    
+    if not url or not key:
+        raise ValueError("未在环境变量中找到 SUPABASE_URL 或 SUPABASE_KEY")
+
+    # 2. 初始化 Supabase Client (如果之前没在全局定义)
+    from supabase import create_client
+    supabase_client = create_client(url, key)
+
+    # 3. 准备上传路径
+    # 建议按照用户 ID 分文件夹，或者直接存入生成的文件夹
+    file_name = local_path.name
+    storage_path = f"models/{file_name}" # 存放在桶内的 models 文件夹下
+
+    # 4. 执行上传
+    with open(local_path, "rb") as f:
+        # upsert=True 表示如果文件名重复则覆盖
+        supabase_client.storage.from_("models").upload(
+            path=storage_path,
+            file=f,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+    # 5. 获取公网下载链接
+    public_url = supabase_client.storage.from_("models").get_public_url(storage_path)
+    return public_url
