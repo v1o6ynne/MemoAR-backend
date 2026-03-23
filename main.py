@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from fastapi.staticfiles import StaticFiles
+# from fastapi.staticfiles import StaticFiles
 
 from Routes.model_route import router as model_router
 from Routes.memory_route import router as memory_router
@@ -22,7 +22,7 @@ app.include_router(write_file_router)
 app.include_router(read_file_router)
 
 # expose Storage directory
-app.mount("/Storage", StaticFiles(directory="Storage"), name="Storage")
+# app.mount("/Storage", StaticFiles(directory="Storage"), name="Storage")
 
 
 @app.get("/")
