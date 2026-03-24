@@ -261,4 +261,5 @@ def _upload_to_supabase(local_path: Path, content_type: str, user_id: str, file_
         )
 
     public_url = supabase_client.storage.from_("models").get_public_url(storage_path)
+    print(public_url)
     return public_url
