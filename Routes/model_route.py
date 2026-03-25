@@ -28,24 +28,10 @@ class ImageToModelRequest(BaseModel):
 @router.post("/image")
 async def image_model(req: ImageToModelRequest):
     file_name = os.path.basename(req.output_usdz_path)
-
-    # Normalize path separators in case of different OS styles
-    normalized_path = os.path.normpath(req.output_usdz_path)
-    parts = normalized_path.split(os.sep)
-
-    # Expected: Storage/{userId}/ARitems/{memoryId}.jpg
-    try:
-        storage_idx = parts.index("Storage")
-        user_id = parts[storage_idx + 1]
-    except (ValueError, IndexError):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid image_path format: {req.output_usdz_path}"
-        )
     
     supabase_url = await generate_model_from_image(
         image_path=req.image_path,
-        user_id=user_id,
+        user_id=req.user_id,
         file_name=file_name
     )
     
