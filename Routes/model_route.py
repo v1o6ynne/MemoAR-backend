@@ -30,7 +30,7 @@ async def image_model(req: ImageToModelRequest):
     file_name = os.path.basename(req.output_usdz_path)
 
     # Normalize path separators in case of different OS styles
-    normalized_path = os.path.normpath(req.image_path)
+    normalized_path = os.path.normpath(req.output_usdz_path)
     parts = normalized_path.split(os.sep)
 
     # Expected: Storage/{userId}/ARitems/{memoryId}.jpg
@@ -40,7 +40,7 @@ async def image_model(req: ImageToModelRequest):
     except (ValueError, IndexError):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid image_path format: {req.image_path}"
+            detail=f"Invalid image_path format: {req.output_usdz_path}"
         )
     
     supabase_url = await generate_model_from_image(
