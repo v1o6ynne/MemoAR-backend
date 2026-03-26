@@ -251,7 +251,7 @@ def _upload_to_supabase(local_path: Path, content_type: str, user_id: str, file_
 
     # using user_id and file_name for the path
     # path: models/user_id/file_name.usdz
-    storage_path = f"{user_id}/{file_name}" 
+    storage_path = f"{local_path}" 
 
     with open(local_path, "rb") as f:
         supabase_client.storage.from_("models").upload(

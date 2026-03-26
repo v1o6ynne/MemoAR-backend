@@ -27,7 +27,7 @@ class ImageToModelRequest(BaseModel):
 
 @router.post("/image")
 async def image_model(req: ImageToModelRequest):
-    file_name = os.path.basename(req.output_usdz_path)
+    file_name = req.output_usdz_path
     
     supabase_url = await generate_model_from_image(
         image_path=req.image_path,
@@ -87,7 +87,7 @@ async def stylize_model(
             prompt=prompt,
             user_image_bytes=image_bytes,
             user_mime_type=file.content_type or "image/jpeg",
-            output_path=os.path.basename(modelImagePath),
+            output_path=modelImagePath,
             reference_image_path=reference_image_path,
         )
     
