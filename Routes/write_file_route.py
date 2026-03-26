@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from pathlib import Path
 import json
 import re
+from Database import pg
 
 router = APIRouter(prefix="/writeData", tags=["WriteData"])
 
@@ -87,49 +88,26 @@ async def upsert_memory(req: UpsertMemoryRequest):
     memory_id = memory.get("id")
     if not memory_id:
         raise HTTPException(status_code=400, detail="memory.id is required")
-
-    file_path = _memory_list_path(user_id)
-    memory_list = _load_memory_list(file_path)
-
-    existing_index = next(
-        (i for i, item in enumerate(memory_list) if item.get("id") == memory_id),
-        None
-    )
-
-    if existing_index is not None:
-        memory_list[existing_index] = memory
-    else:
-        memory_list.insert(0, memory)
-
-    # 可选：最多保留 100 条
-    # memory_list = memory_list[:100]
-
-    _atomic_write_json(file_path, memory_list)
+    
+    safe_user_id = _validate_user_id(user_id)
+    pg.upsert_memory(safe_user_id, str(memory_id), memory)
 
     return {
         "ok": True,
         "user_id": user_id,
         "memory_id": memory_id,
-        "count": len(memory_list),
-        "saved_to": str(file_path.relative_to(PROJECT_ROOT))
+        "count": None,
+        "saved_to": "postgres:memories"
     }
 
 
 def mark_memory_has_model(user_id: str, memory_id: str, saved_path: str):
-    file_path = _memory_list_path(user_id)
-    memory_list = _load_memory_list(file_path)
-
-    existing_index = next(
-        (i for i, item in enumerate(memory_list) if item.get("id") == memory_id),
-        None
-    )
-
-    if existing_index is None:
+    safe_user_id = _validate_user_id(user_id)
+    memories = pg.list_memories(safe_user_id, limit=500)
+    existing = next((m for m in memories if m.get("id") == memory_id), None)
+    if not existing:
         raise HTTPException(status_code=404, detail="Memory not found")
-
-    memory_list[existing_index]["arPath"] = saved_path
-    memory_list[existing_index]["hasModel"] = True
-
-    _atomic_write_json(file_path, memory_list)
-
-    return memory_list[existing_index]
+    existing["arPath"] = saved_path
+    existing["hasModel"] = True
+    pg.upsert_memory(safe_user_id, str(memory_id), existing)
+    return existing
