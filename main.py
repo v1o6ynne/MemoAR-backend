@@ -17,10 +17,11 @@ app = FastAPI(
     version="0.1.0",
 )
 
-@app.on_event("startup")
-def _startup_migrate():
-    # Safe: CREATE TABLE IF NOT EXISTS
-    pg.migrate()
+# this is for memory_list in supabase support
+# @app.on_event("startup")
+# def _startup_migrate():
+#     # Safe: CREATE TABLE IF NOT EXISTS
+#     pg.migrate()
 
 
 app.include_router(model_router)
