@@ -111,6 +111,7 @@ class GeminiService:
                     print("part.as_image() failed:", e)
 
         raise ValueError(f"Model did not return an image part. Full response: {response}")
+    
 
     @staticmethod
     def _guess_mime_type(suffix: str) -> str:

@@ -87,7 +87,7 @@ async def stylize_model(
             prompt=prompt,
             user_image_bytes=image_bytes,
             user_mime_type=file.content_type or "image/jpeg",
-            file_name=os.path.basename(modelImagePath),
+            output_path=os.path.basename(modelImagePath),
             reference_image_path=reference_image_path,
         )
     
