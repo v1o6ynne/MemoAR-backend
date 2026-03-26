@@ -8,3 +8,4 @@ openai
 requests
 supabase
 google-genai
+psycopg[binary]
