@@ -71,12 +71,11 @@ async def generate_model_from_image(
     if usdz_file is None:
         raise RuntimeError(f"No USDZ file found in output: {files}")
 
-    print(f"Uploading to Supabase: {file_name} for user {user_id}")
+    print(f"Uploading to Supabase: {output_usdz_path} for user {user_id}")
     remote_url = _upload_to_supabase(
         local_path=usdz_file, 
         content_type="model/vnd.usdz+zip",
-        user_id=user_id,
-        file_name=file_name
+        object_path=output_usdz_path
     )
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -236,30 +235,23 @@ def _render_usdz_poster(usdz_path: Path, poster_path: Path):
     if not poster_path.exists():
         raise RuntimeError(f"Poster PNG not produced: {poster_path}")
     
-def _upload_to_supabase(local_path: Path, content_type: str, user_id: str, file_name: str) -> str:
-    """
-    upload to Supabase Storage under user_id folder
-    """
+def _upload_to_supabase(local_path: Path, content_type: str, object_path: str) -> str:
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
-    
+
     if not url or not key:
         raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY")
 
     from supabase import create_client
     supabase_client = create_client(url, key)
 
-    # using user_id and file_name for the path
-    # path: models/user_id/file_name.usdz
-    storage_path = f"{local_path}" 
-
     with open(local_path, "rb") as f:
         supabase_client.storage.from_("models").upload(
-            path=storage_path,
+            path=object_path,
             file=f,
             file_options={"content-type": content_type, "upsert": "true"}
         )
 
-    public_url = supabase_client.storage.from_("models").get_public_url(storage_path)
+    public_url = supabase_client.storage.from_("models").get_public_url(object_path)
     print(public_url)
     return public_url
