@@ -5,7 +5,7 @@ import json
 from typing import Optional
 
 from Prompts.memory_prompt import MEMORY_LABEL_EXTRACT_PROMPT, MEMORY_PALETTE_EXTRACT_PROMPT,  NANOBANANA_STYLIZE_PROMPT
-from Utils.file_io import read_json_text
+from Database import pg
 from Memories.gemini_services import GeminiService
 
 
@@ -22,11 +22,7 @@ class MemoryLabelRequest(BaseModel):
 
 @router.post("/label")
 async def label_memory(req: MemoryLabelRequest):
-    label_db_path = Template(LABEL_DB_TEMPLATE).substitute(
-        PARTICIPANT=req.participant
-    )
-
-    existing_labels_text = read_json_text(label_db_path)
+    existing_labels_text = pg.get_label_db_text(req.participant)
 
     prompt = Template(MEMORY_LABEL_EXTRACT_PROMPT).substitute(
         DESCRIPTION=req.description,
