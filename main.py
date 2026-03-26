@@ -7,6 +7,8 @@ from Routes.memory_route import router as memory_router
 from Routes.write_file_route import router as write_file_router
 from Routes.read_file_route import router as read_file_router
 
+from Database import pg
+
 
 load_dotenv()
 
@@ -18,8 +20,7 @@ app = FastAPI(
 @app.on_event("startup")
 def _startup_migrate():
     # Safe: CREATE TABLE IF NOT EXISTS
-    migrate()
-
+    pg.migrate()
 
 
 app.include_router(model_router)
