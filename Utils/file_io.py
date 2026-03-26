@@ -3,17 +3,29 @@ from pathlib import Path
 
 
 def read_text(path: str) -> str:
-    return Path(path).read_text(encoding="utf-8")
+    p = Path(path)
+    if not p.exists():
+        return ""
+    return p.read_text(encoding="utf-8")
 
 
 def read_json(path: str) -> dict:
-    return json.loads(read_text(path))
+    raw = read_text(path).strip()
+    if not raw:
+        return {}
+    return json.loads(raw)
 
 
 def read_json_text(path: str) -> str:
     """
     Read trigger JSON and return flattened text for prompt usage.
     """
+    p = Path(path)
+    # New user / fresh deploy: allow missing db file.
+    if not p.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return ""
+
     trigger_dict = read_json(path)
 
     lines = []
@@ -37,6 +49,7 @@ def update_trigger_db(path: str, triggers: dict) -> dict:
     Add new trigger values if missing; keep existing.
     triggers example: {"context": "Dog", "location": "Kansas", ...}
     """
+    # Allow missing db file on first write.
     db = read_json(path)
 
     for k in ["context", "time", "location", "emotion"]:
