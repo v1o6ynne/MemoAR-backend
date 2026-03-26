@@ -15,6 +15,12 @@ app = FastAPI(
     version="0.1.0",
 )
 
+@app.on_event("startup")
+def _startup_migrate():
+    # Safe: CREATE TABLE IF NOT EXISTS
+    migrate()
+
+
 
 app.include_router(model_router)
 app.include_router(memory_router)
