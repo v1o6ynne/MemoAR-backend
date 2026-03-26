@@ -246,12 +246,12 @@ def _upload_to_supabase(local_path: Path, content_type: str, object_path: str) -
     supabase_client = create_client(url, key)
 
     with open(local_path, "rb") as f:
-        supabase_client.storage.from_("models").upload(
+        supabase_client.storage.from_("storage").upload(
             path=object_path,
             file=f,
             file_options={"content-type": content_type, "upsert": "true"}
         )
 
-    public_url = supabase_client.storage.from_("models").get_public_url(object_path)
+    public_url = supabase_client.storage.from_("storage").get_public_url(object_path)
     print(public_url)
     return public_url

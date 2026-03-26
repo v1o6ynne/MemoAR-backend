@@ -32,7 +32,7 @@ async def image_model(req: ImageToModelRequest):
     supabase_url = await generate_model_from_image(
         image_path=req.image_path,
         user_id=req.user_id,
-        file_name=file_name
+        output_usdz_path=file_name
     )
     
     updated_memory = mark_memory_has_model(
