@@ -3,6 +3,15 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+from supabase import create_client, Client
+
+# 获取环境变量
+url: str = os.environ.get("SUPABASE_URL", "")
+key: str = os.environ.get("SUPABASE_KEY", "")
+
+# 初始化
+supabase: Client = create_client(url, key)
+
 
 class GeminiService:
     def __init__(
@@ -106,7 +115,12 @@ class GeminiService:
                 try:
                     image = part.as_image()
                     image.save(out_path)
-                    return str(out_path)
+
+                    remote_url = self._upload_to_supabase(
+                        path=out_path,
+                        content_type="image/jpeg",
+                    )
+                    return remote_url
                 except Exception as e:
                     print("part.as_image() failed:", e)
 
@@ -123,4 +137,25 @@ class GeminiService:
         if suffix == ".webp":
             return "image/webp"
         return "image/jpeg"
-       
+    
+    @staticmethod   
+    def _upload_to_supabase(path: Path, content_type: str) -> str:
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+
+        if not url or not key:
+            raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY")
+
+        from supabase import create_client
+        supabase_client = create_client(url, key)
+
+        with open(path, "rb") as f:
+            supabase_client.storage.from_("storage").upload(
+                path=str(path),
+                file=f,
+                file_options={"content-type": content_type, "upsert": "true"}
+            )
+
+        public_url = supabase_client.storage.from_("storage").get_public_url(str(path))
+        print(public_url)
+        return public_url

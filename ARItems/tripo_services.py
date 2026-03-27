@@ -235,6 +235,8 @@ def _render_usdz_poster(usdz_path: Path, poster_path: Path):
     if not poster_path.exists():
         raise RuntimeError(f"Poster PNG not produced: {poster_path}")
     
+
+ 
 def _upload_to_supabase(local_path: Path, content_type: str, object_path: str) -> str:
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
