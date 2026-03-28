@@ -11,6 +11,8 @@ from tripo3d import TripoClient
 from tripo3d.models import TaskStatus
 
 from supabase import create_client, Client
+import asyncio
+from tripo3d.exceptions import TripoRequestError
 
 # 获取环境变量
 url: str = os.environ.get("SUPABASE_URL", "")
@@ -20,8 +22,59 @@ key: str = os.environ.get("SUPABASE_KEY", "")
 supabase: Client = create_client(url, key)
 
 
-TRIPO_TASK_URL = "https://api.tripo3d.ai/v2/openapi/task"
 
+
+
+TRIPO_TASK_URL = "https://api.tripo3d.ai/v2/openapi/task"
+async def _wait_for_task_with_retry(
+    client: TripoClient,
+    task_id: str,
+    *,
+    verbose: bool = True,
+    retries: int = 5,
+    base_delay: float = 1.5,
+):
+    last_error = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            task = await client.wait_for_task(task_id, verbose=verbose)
+            return task
+        except TripoRequestError as e:
+            last_error = e
+            msg = str(e)
+
+            retryable = (
+                "HTTP 502" in msg
+                or "HTTP 503" in msg
+                or "HTTP 504" in msg
+                or "Bad Gateway" in msg
+            )
+
+            print(
+                f"⚠️ [Tripo] wait_for_task failed "
+                f"attempt={attempt}/{retries} task_id={task_id} "
+                f"retryable={retryable} error={e}"
+            )
+
+            if not retryable or attempt == retries:
+                raise
+
+            await asyncio.sleep(base_delay * attempt)
+
+        except Exception as e:
+            last_error = e
+            print(
+                f"⚠️ [Tripo] unexpected wait_for_task failure "
+                f"attempt={attempt}/{retries} task_id={task_id} error={e}"
+            )
+
+            if attempt == retries:
+                raise
+
+            await asyncio.sleep(base_delay * attempt)
+
+    raise last_error if last_error else RuntimeError(f"Unknown wait_for_task failure: {task_id}")
 
 # ===== Image Path -> USDZ =====
 
@@ -54,16 +107,17 @@ async def generate_model_from_image(
             orientation=orientation,
         )
 
-        task = await client.wait_for_task(task_id, verbose=True)
+        print(f"🟡 [Tripo] image_to_model task_id={task_id}")
+        task = await _wait_for_task_with_retry(client, task_id, verbose=True)
         if task.status != TaskStatus.SUCCESS:
             raise RuntimeError(f"Image-to-model task failed: {task.status}")
 
-        
         convert_task_id = _submit_convert_task(task_id)
-        convert_task = await client.wait_for_task(convert_task_id, verbose=True)
+        print(f"🟡 [Tripo] convert_model task_id={convert_task_id}")
+
+        convert_task = await _wait_for_task_with_retry(client, convert_task_id, verbose=True)
         if convert_task.status != TaskStatus.SUCCESS:
             raise RuntimeError(f"Convert-to-USDZ task failed: {convert_task.status}")
-
         
         files = await client.download_task_models(convert_task, str(tmp_dir))
 
