@@ -9,3 +9,6 @@ requests
 supabase
 google-genai
 psycopg[binary]
+rembg
+Pillow
+onnxruntime

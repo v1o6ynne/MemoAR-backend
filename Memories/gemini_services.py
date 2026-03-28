@@ -5,6 +5,9 @@ from google.genai import types
 
 from supabase import create_client, Client
 
+from rembg import remove
+from PIL import Image
+
 # 获取环境变量
 url: str = os.environ.get("SUPABASE_URL", "")
 key: str = os.environ.get("SUPABASE_KEY", "")
@@ -116,9 +119,11 @@ class GeminiService:
                     image = part.as_image()
                     image.save(out_path)
 
+                    bg_removed_path = self._remove_background(out_path)
+
                     remote_url = self._upload_to_supabase(
-                        path=out_path,
-                        content_type="image/jpeg",
+                        path=bg_removed_path,
+                        content_type="image/png",
                     )
                     return remote_url
                 except Exception as e:
@@ -137,6 +142,15 @@ class GeminiService:
         if suffix == ".webp":
             return "image/webp"
         return "image/jpeg"
+    
+    @staticmethod
+    def _remove_background(path: Path) -> Path:
+        input_bytes = path.read_bytes()
+        output_bytes = remove(input_bytes)
+
+        out_png = path.with_suffix(".png")
+        out_png.write_bytes(output_bytes)
+        return out_png
     
     @staticmethod   
     def _upload_to_supabase(path: Path, content_type: str) -> str:
