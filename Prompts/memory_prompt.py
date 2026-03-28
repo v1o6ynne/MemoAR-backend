@@ -112,7 +112,7 @@ Rules:
 - Use the user description and the user image together to determine the correct target subject.
 - Keep only the target entity.
 - Remove all other people, objects, and background elements from the original image.
-- Background must be clear and transparent.
+- Background must be pure white.
 - Center the subject in the frame and show it fully.
 - No text, watermark, props, scenery, decorations, or extra elements.
 - Apply only the visual style of the reference image: Pop Mart-inspired collectible toy aesthetic, smooth surfaces, simplified but recognizable features, polished designer toy look.
