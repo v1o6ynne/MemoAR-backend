@@ -121,7 +121,11 @@ class GeminiService:
                     image = part.as_image()
                     image.save(out_path)
 
-                    bg_removed_path = self._remove_background(out_path)
+                    bg_removed_path = self._remove_white_background(
+                        out_path,
+                        threshold=238,
+                        softness=18
+                    )
 
                     remote_url = self._upload_to_supabase(
                         path=bg_removed_path,
@@ -145,14 +149,48 @@ class GeminiService:
             return "image/webp"
         return "image/jpeg"
     
+    # @staticmethod
+    # def _remove_background(path: Path) -> Path:
+    #     input_bytes = path.read_bytes()
+    #     output_bytes = remove(input_bytes, )
+
+    #     out_png = path.with_suffix(".png")
+    #     out_png.write_bytes(output_bytes)
+    #     return out_png
+
     @staticmethod
-    def _remove_background(path: Path) -> Path:
-        input_bytes = path.read_bytes()
-        output_bytes = remove(input_bytes, )
+    def _remove_white_background(
+        path: Path,
+        threshold: int = 238,
+        softness: int = 18
+    ) -> Path:
+        image = Image.open(path).convert("RGBA")
+        pixels = image.load()
+        width, height = image.size
+
+        for y in range(height):
+            for x in range(width):
+                r, g, b, a = pixels[x, y]
+
+                # 越接近 255 越白
+                min_rgb = min(r, g, b)
+
+                if min_rgb >= threshold:
+                    # 很白，直接透明
+                    pixels[x, y] = (r, g, b, 0)
+                elif min_rgb >= threshold - softness:
+                    # 边缘过渡区，做一点半透明减少白边
+                    alpha = int(255 * (threshold - min_rgb) / max(softness, 1))
+                    alpha = max(0, min(255, alpha))
+                    pixels[x, y] = (r, g, b, alpha)
+                else:
+                    pixels[x, y] = (r, g, b, a)
 
         out_png = path.with_suffix(".png")
-        out_png.write_bytes(output_bytes)
+        image.save(out_png)
         return out_png
+    
+
     
     @staticmethod   
     def _upload_to_supabase(path: Path, content_type: str) -> str:
