@@ -30,6 +30,11 @@ Field rules:
   - If there is an existing category label that reasonably matches the memory, use that exact label (case-sensitive).
   - Multiple categories can be included if they are clearly supported by the description and existing labels, but avoid over-labeling.
   - Examples: "Dance ", "Friends", "campus walk", "Study", "performance", "Dinner"
+    - Also include exactly one emotional tone label if it can be clearly inferred from the description:
+    - "positive" — joyful, celebratory, social, or fun memories
+    - "energetic" — active, sporty, high-energy, or motivated memories
+    - "reflective" — calm, nostalgic, quiet, or contemplative memories
+  - Use the exact lowercase string. If the emotional tone is ambiguous or unclear, omit it.
 
 - time:
   - Infer from the timestamp first.
