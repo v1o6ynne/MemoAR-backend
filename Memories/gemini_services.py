@@ -5,8 +5,9 @@ from google.genai import types
 
 from supabase import create_client, Client
 
-from rembg import remove
+from rembg import remove, new_session  # 1. 加上 new_session
 from PIL import Image
+
 
 # 获取环境变量
 url: str = os.environ.get("SUPABASE_URL", "")
@@ -14,6 +15,7 @@ key: str = os.environ.get("SUPABASE_KEY", "")
 
 # 初始化
 supabase: Client = create_client(url, key)
+_rembg_session = new_session("u2netp")
 
 
 class GeminiService:
@@ -146,7 +148,7 @@ class GeminiService:
     @staticmethod
     def _remove_background(path: Path) -> Path:
         input_bytes = path.read_bytes()
-        output_bytes = remove(input_bytes)
+        output_bytes = remove(input_bytes, )
 
         out_png = path.with_suffix(".png")
         out_png.write_bytes(output_bytes)
