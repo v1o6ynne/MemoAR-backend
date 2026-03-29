@@ -31,11 +31,11 @@ Field rules:
   - Multiple categories can be included if they are clearly supported by the description and existing labels, but avoid over-labeling.
   - Examples: "Dance ", "Friends", "campus walk", "Study", "performance", "Dinner"
   - Also include exactly one emotional tone label if it can be clearly inferred from the description:
-    - "positive" — joyful, celebratory, social, or fun memories
+    - "positive" — joyful, celebratory, social, or fun memories, including first-time achievements
     - "energetic" — active, sporty, high-energy, or motivated memories
     - "reflective" — calm, nostalgic, quiet, or contemplative memories
-    - "resilient" — moments of physical exhaustion, hard work, overcoming stress, or finishing a challenging task (e.g., moving, late-night study, deep cleaning).
-    - Use the exact lowercase string. If the emotional tone is ambiguous or unclear, or doesn't fit these four, omit it. For high-effort tasks that cause fatigue (like "so tired from moving"), prioritize "resilient" over "energetic."
+    - "resilient" — moments of physical exhaustion, hard work, stress, or finishing a challenging task that cause fatigue.
+    - Use the exact lowercase string. If the emotional tone is ambiguous or unclear, or doesn't fit these four, omit it.
 
 - time:
   - Infer from the timestamp first.
