@@ -14,6 +14,10 @@ from supabase import create_client, Client
 import asyncio
 from tripo3d.exceptions import TripoRequestError
 
+import tempfile
+import uuid
+
+
 # 获取环境变量
 url: str = os.environ.get("SUPABASE_URL", "")
 key: str = os.environ.get("SUPABASE_KEY", "")
@@ -78,64 +82,225 @@ async def _wait_for_task_with_retry(
 
 # ===== Image Path -> USDZ =====
 
-async def generate_model_from_image(
+def _resolve_input_image_path(
     image_path: str,
-    output_usdz_path: str = "", 
-    orientation: str = "align_image",
-    user_id: str = "default_user",
-    file_name: str = "model.usdz"
-):
+) -> tuple[str, Path | None]:
     """
-    generate 3D model and upload to Supabase
+    Resolve an input image into a path usable by Tripo.
+
+    Returns:
+        resolved_path:
+            HTTP URL or an actual local file path.
+
+        temporary_file:
+            A downloaded temporary file that should be removed later.
+            None when no temporary file was created.
     """
-    
-    input_path = Path(image_path)
-    
-    if not str(image_path).startswith("http") and not input_path.exists():
-        raise FileNotFoundError(f"Input image not found: {image_path}")
 
-    
-    working_dir = Path("/tmp/tripo_work")
-    working_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir = working_dir / f"task_{user_id}_{os.getpid()}"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    # Tripo can directly receive an HTTP URL.
+    if image_path.startswith(("http://", "https://")):
+        print(f"✅ [InputImage] using remote URL: {image_path}")
+        return image_path, None
 
-    async with TripoClient() as client:
-        
-        task_id = await client.image_to_model(
-            image=str(image_path),
-            orientation=orientation,
+    local_path = Path(image_path)
+
+    # Compatibility with an actual backend-local file.
+    if local_path.is_file():
+        print(f"✅ [InputImage] using local file: {local_path}")
+        return str(local_path), None
+
+    # Otherwise, treat it as a Supabase Storage object path.
+    object_path = image_path.lstrip("/")
+
+    print("🟡 [InputImage] downloading from Supabase")
+    print("   bucket = storage")
+    print("   object_path =", object_path)
+
+    try:
+        image_bytes = (
+            supabase.storage
+            .from_("storage")
+            .download(object_path)
+        )
+    except Exception as exc:
+        print("❌ [InputImage] Supabase download failed:", repr(exc))
+
+        raise FileNotFoundError(
+            f"Input image was not found locally or in Supabase: "
+            f"{object_path}"
+        ) from exc
+
+    if not image_bytes:
+        raise FileNotFoundError(
+            f"Supabase returned an empty input image: {object_path}"
         )
 
-        print(f"🟡 [Tripo] image_to_model task_id={task_id}")
-        task = await _wait_for_task_with_retry(client, task_id, verbose=True)
-        if task.status != TaskStatus.SUCCESS:
-            raise RuntimeError(f"Image-to-model task failed: {task.status}")
+    suffix = Path(object_path).suffix or ".png"
 
-        convert_task_id = _submit_convert_task(task_id)
-        print(f"🟡 [Tripo] convert_model task_id={convert_task_id}")
+    with tempfile.NamedTemporaryFile(
+        prefix="memoar-input-",
+        suffix=suffix,
+        delete=False,
+    ) as temporary_file:
+        temporary_file.write(image_bytes)
+        temporary_path = Path(temporary_file.name)
 
-        convert_task = await _wait_for_task_with_retry(client, convert_task_id, verbose=True)
-        if convert_task.status != TaskStatus.SUCCESS:
-            raise RuntimeError(f"Convert-to-USDZ task failed: {convert_task.status}")
-        
-        files = await client.download_task_models(convert_task, str(tmp_dir))
+    print("✅ [InputImage] downloaded to temporary file")
+    print("   path =", temporary_path)
+    print("   bytes =", len(image_bytes))
 
-    usdz_file = _find_usdz_file(files, tmp_dir)
-    if usdz_file is None:
-        raise RuntimeError(f"No USDZ file found in output: {files}")
+    return str(temporary_path), temporary_path
 
-    print(f"Uploading to Supabase: {output_usdz_path} for user {user_id}")
-    remote_url = _upload_to_supabase(
-        local_path=usdz_file, 
-        content_type="model/vnd.usdz+zip",
-        object_path=output_usdz_path
-    )
+async def generate_model_from_image(
+    image_path: str,
+    output_usdz_path: str = "",
+    orientation: str = "align_image",
+    user_id: str = "default_user",
+    file_name: str = "model.usdz",
+):
+    """
+    Generate a 3D model from:
+    - an HTTP image URL,
+    - a backend-local image path, or
+    - a Supabase Storage object path.
 
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+    Then convert it to USDZ and upload the USDZ to Supabase.
+    """
 
-    # this is Supabase public URL for frontend to download
-    return remote_url
+    resolved_image_path: str | None = None
+    temporary_input_file: Path | None = None
+    tmp_dir: Path | None = None
+
+    try:
+        # The frontend sends a Supabase object path such as:
+        # user-id/modelImages/memory-id.png
+        resolved_image_path, temporary_input_file = (
+            _resolve_input_image_path(image_path)
+        )
+
+        print("🟡 [Tripo] original image_path =", image_path)
+        print("🟡 [Tripo] resolved image_path =", resolved_image_path)
+
+        working_dir = Path("/tmp/tripo_work")
+        working_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # uuid prevents concurrent requests from using the same directory.
+        tmp_dir = (
+            working_dir
+            / f"task_{user_id}_{uuid.uuid4().hex}"
+        )
+
+        tmp_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        async with TripoClient() as client:
+            task_id = await client.image_to_model(
+                image=resolved_image_path,
+                orientation=orientation,
+            )
+
+            print(
+                f"🟡 [Tripo] image_to_model "
+                f"task_id={task_id}"
+            )
+
+            task = await _wait_for_task_with_retry(
+                client,
+                task_id,
+                verbose=True,
+            )
+
+            if task.status != TaskStatus.SUCCESS:
+                raise RuntimeError(
+                    f"Image-to-model task failed: "
+                    f"{task.status}"
+                )
+
+            convert_task_id = _submit_convert_task(
+                task_id
+            )
+
+            print(
+                f"🟡 [Tripo] convert_model "
+                f"task_id={convert_task_id}"
+            )
+
+            convert_task = await _wait_for_task_with_retry(
+                client,
+                convert_task_id,
+                verbose=True,
+            )
+
+            if convert_task.status != TaskStatus.SUCCESS:
+                raise RuntimeError(
+                    f"Convert-to-USDZ task failed: "
+                    f"{convert_task.status}"
+                )
+
+            files = await client.download_task_models(
+                convert_task,
+                str(tmp_dir),
+            )
+
+        usdz_file = _find_usdz_file(
+            files,
+            tmp_dir,
+        )
+
+        if usdz_file is None:
+            raise RuntimeError(
+                f"No USDZ file found in output: {files}"
+            )
+
+        print(
+            f"🟡 Uploading USDZ to Supabase: "
+            f"{output_usdz_path} for user {user_id}"
+        )
+
+        remote_url = _upload_to_supabase(
+            local_path=usdz_file,
+            content_type="model/vnd.usdz+zip",
+            object_path=output_usdz_path,
+        )
+
+        print(
+            "✅ [Tripo] USDZ uploaded:",
+            remote_url,
+        )
+
+        return remote_url
+
+    finally:
+        # Remove downloaded input PNG.
+        if (
+            temporary_input_file is not None
+            and temporary_input_file.exists()
+        ):
+            temporary_input_file.unlink(
+                missing_ok=True
+            )
+
+            print(
+                "🧹 Removed temporary input image:",
+                temporary_input_file,
+            )
+
+        # Remove downloaded Tripo result directory.
+        if tmp_dir is not None:
+            shutil.rmtree(
+                tmp_dir,
+                ignore_errors=True,
+            )
+
+            print(
+                "🧹 Removed Tripo working directory:",
+                tmp_dir,
+            )
 
 
 def _submit_convert_task(original_model_task_id: str) -> str:
