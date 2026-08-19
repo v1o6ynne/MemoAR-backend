@@ -49,6 +49,16 @@ def migrate() -> None:
                 );
                 """
             )
+            cur.execute(
+                """
+                create table if not exists user_profiles (
+                  user_id text primary key,
+                  email text not null,
+                  created_at timestamptz not null default now(),
+                  updated_at timestamptz not null default now()
+                );
+                """
+            )
         conn.commit()
 
 
@@ -114,3 +124,41 @@ def get_label_db_text(user_id: str) -> str:
             lines.append(f"{key}: {', '.join(vals)}")
     return "\n".join(lines)
 
+
+def upsert_user_email(user_id: str, email: str) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into user_profiles (user_id, email, created_at, updated_at)
+                values (%s, %s, now(), now())
+                on conflict (user_id) do update
+                set email = excluded.email,
+                    updated_at = now();
+                """,
+                (user_id, email),
+            )
+        conn.commit()
+
+
+def get_user_email(user_id: str) -> Optional[str]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select email
+                from user_profiles
+                where user_id = %s;
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        return None
+
+    email = row.get("email")
+    if email is None:
+        return None
+
+    return str(email)
