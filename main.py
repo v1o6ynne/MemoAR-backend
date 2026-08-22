@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from fastapi.staticfiles import StaticFiles
+# from fastapi.staticfiles import StaticFiles
 
 from Routes.model_route import router as model_router
 from Routes.memory_route import router as memory_router
@@ -19,9 +19,10 @@ app = FastAPI(
 
 @app.on_event("startup")
 def _startup_migrate():
-    # Safe: CREATE TABLE IF NOT EXISTS
-    pg.migrate()
-
+    try:
+        pg.migrate()
+    except Exception as e:
+        print("⚠️ migrate skipped:", repr(e))
 
 app.include_router(model_router)
 app.include_router(memory_router)
