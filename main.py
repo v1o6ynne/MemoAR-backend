@@ -84,6 +84,12 @@ def _startup_migrate():
     try:
         pg.migrate()
     except Exception as e:
+        message = str(e)
+        if "SUPABASE_DATABASE_URL" in message or "SUPABASE_DB_URL" in message:
+            print(
+                "⚠️ notification_records migrate skipped: "
+                "set SUPABASE_DATABASE_URL or SUPABASE_DB_URL to your Supabase Postgres connection string."
+            )
         print("⚠️ migrate skipped:", repr(e))
 
 app.include_router(model_router)

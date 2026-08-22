@@ -14,8 +14,24 @@ def _database_url() -> str:
     return url
 
 
+def _supabase_database_url() -> str:
+    url = (
+        os.getenv("SUPABASE_DATABASE_URL", "").strip()
+        or os.getenv("SUPABASE_DB_URL", "").strip()
+    )
+    if not url:
+        raise RuntimeError(
+            "SUPABASE_DATABASE_URL (or SUPABASE_DB_URL) is not set for notification_records"
+        )
+    return url
+
+
 def get_conn() -> psycopg.Connection:
     return psycopg.connect(_database_url(), row_factory=dict_row)
+
+
+def get_notification_conn() -> psycopg.Connection:
+    return psycopg.connect(_supabase_database_url(), row_factory=dict_row)
 
 
 def _normalize_json_object(value: Any) -> dict[str, Any]:
@@ -83,10 +99,7 @@ def _api_process_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def migrate() -> None:
-    """
-    Minimal migrations. Safe to run on every startup.
-    """
+def _migrate_primary_tables() -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -156,6 +169,60 @@ def migrate() -> None:
             )
             cur.execute(
                 """
+                create table if not exists api_process_records (
+                  record_id text primary key,
+                  request_id text not null,
+                  method text not null,
+                  path text not null,
+                  route_path text,
+                  query_string text,
+                  status_code integer,
+                  process_status text not null,
+                  error_type text,
+                  error_message text,
+                  duration_ms integer,
+                  client_host text,
+                  request_meta jsonb not null default '{}'::jsonb,
+                  created_at timestamptz not null default now()
+                );
+                """
+            )
+            cur.execute(
+                """
+                alter table api_process_records
+                add column if not exists request_id text,
+                add column if not exists route_path text,
+                add column if not exists query_string text,
+                add column if not exists status_code integer,
+                add column if not exists process_status text,
+                add column if not exists error_type text,
+                add column if not exists error_message text,
+                add column if not exists duration_ms integer,
+                add column if not exists client_host text,
+                add column if not exists request_meta jsonb not null default '{}'::jsonb,
+                add column if not exists created_at timestamptz not null default now();
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists api_process_records_route_created_idx
+                on api_process_records (route_path, created_at desc);
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists api_process_records_status_created_idx
+                on api_process_records (process_status, created_at desc);
+                """
+            )
+        conn.commit()
+
+
+def _migrate_notification_tables() -> None:
+    with get_notification_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
                 create table if not exists notification_records (
                   record_id text primary key,
                   user_id text not null,
@@ -219,55 +286,15 @@ def migrate() -> None:
                 on notification_records (user_id, clicked, updated_at desc);
                 """
             )
-            cur.execute(
-                """
-                create table if not exists api_process_records (
-                  record_id text primary key,
-                  request_id text not null,
-                  method text not null,
-                  path text not null,
-                  route_path text,
-                  query_string text,
-                  status_code integer,
-                  process_status text not null,
-                  error_type text,
-                  error_message text,
-                  duration_ms integer,
-                  client_host text,
-                  request_meta jsonb not null default '{}'::jsonb,
-                  created_at timestamptz not null default now()
-                );
-                """
-            )
-            cur.execute(
-                """
-                alter table api_process_records
-                add column if not exists request_id text,
-                add column if not exists route_path text,
-                add column if not exists query_string text,
-                add column if not exists status_code integer,
-                add column if not exists process_status text,
-                add column if not exists error_type text,
-                add column if not exists error_message text,
-                add column if not exists duration_ms integer,
-                add column if not exists client_host text,
-                add column if not exists request_meta jsonb not null default '{}'::jsonb,
-                add column if not exists created_at timestamptz not null default now();
-                """
-            )
-            cur.execute(
-                """
-                create index if not exists api_process_records_route_created_idx
-                on api_process_records (route_path, created_at desc);
-                """
-            )
-            cur.execute(
-                """
-                create index if not exists api_process_records_status_created_idx
-                on api_process_records (process_status, created_at desc);
-                """
-            )
         conn.commit()
+
+
+def migrate() -> None:
+    """
+    Minimal migrations. Safe to run on every startup.
+    """
+    _migrate_primary_tables()
+    _migrate_notification_tables()
 
 
 def upsert_memory(user_id: str, memory_id: str, memory: dict[str, Any]) -> None:
@@ -511,7 +538,7 @@ def upsert_notification_record(
     notification_payload = _normalize_json_object(record.get("notification_payload"))
     details = _normalize_json_object(record.get("details"))
 
-    with get_conn() as conn:
+    with get_notification_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -650,7 +677,7 @@ def list_notification_records(
     user_id: str,
     limit: int = 200,
 ) -> list[dict[str, Any]]:
-    with get_conn() as conn:
+    with get_notification_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -668,7 +695,7 @@ def list_notification_records(
 
 
 def get_notification_record(record_id: str) -> Optional[dict[str, Any]]:
-    with get_conn() as conn:
+    with get_notification_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
