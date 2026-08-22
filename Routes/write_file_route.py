@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
@@ -47,6 +49,11 @@ class CaptureSurveyRequest(BaseModel):
     user_id: str
     memory_id: str
     survey: dict
+
+
+class NotificationRecordRequest(BaseModel):
+    user_id: str
+    record: dict[str, Any]
 
 
 def _validate_user_id(user_id: str) -> str:
@@ -138,4 +145,18 @@ async def upsert_capture_survey(req: CaptureSurveyRequest):
         "user_id": safe_user_id,
         "memory_id": memory_id,
         "stats": stats,
+    }
+
+
+@router.post("/notification-record")
+async def upsert_notification_record(req: NotificationRecordRequest):
+    safe_user_id = _validate_user_id(req.user_id)
+    record = req.record if isinstance(req.record, dict) else {}
+
+    saved_record = pg.upsert_notification_record(safe_user_id, record)
+
+    return {
+        "ok": True,
+        "user_id": safe_user_id,
+        "record": saved_record,
     }
