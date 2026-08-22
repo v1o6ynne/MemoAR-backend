@@ -64,6 +64,25 @@ def _notification_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _api_process_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "record_id": str(row["record_id"]),
+        "request_id": str(row["request_id"]),
+        "method": str(row["method"]),
+        "path": str(row["path"]),
+        "route_path": row.get("route_path"),
+        "query_string": row.get("query_string"),
+        "status_code": row.get("status_code"),
+        "process_status": str(row["process_status"]),
+        "error_type": row.get("error_type"),
+        "error_message": row.get("error_message"),
+        "duration_ms": row.get("duration_ms"),
+        "client_host": row.get("client_host"),
+        "request_meta": _normalize_json_object(row.get("request_meta")),
+        "created_at": _serialize_dt(row.get("created_at")),
+    }
+
+
 def migrate() -> None:
     """
     Minimal migrations. Safe to run on every startup.
@@ -198,6 +217,54 @@ def migrate() -> None:
                 """
                 create index if not exists notification_records_user_clicked_idx
                 on notification_records (user_id, clicked, updated_at desc);
+                """
+            )
+            cur.execute(
+                """
+                create table if not exists api_process_records (
+                  record_id text primary key,
+                  request_id text not null,
+                  method text not null,
+                  path text not null,
+                  route_path text,
+                  query_string text,
+                  status_code integer,
+                  process_status text not null,
+                  error_type text,
+                  error_message text,
+                  duration_ms integer,
+                  client_host text,
+                  request_meta jsonb not null default '{}'::jsonb,
+                  created_at timestamptz not null default now()
+                );
+                """
+            )
+            cur.execute(
+                """
+                alter table api_process_records
+                add column if not exists request_id text,
+                add column if not exists route_path text,
+                add column if not exists query_string text,
+                add column if not exists status_code integer,
+                add column if not exists process_status text,
+                add column if not exists error_type text,
+                add column if not exists error_message text,
+                add column if not exists duration_ms integer,
+                add column if not exists client_host text,
+                add column if not exists request_meta jsonb not null default '{}'::jsonb,
+                add column if not exists created_at timestamptz not null default now();
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists api_process_records_route_created_idx
+                on api_process_records (route_path, created_at desc);
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists api_process_records_status_created_idx
+                on api_process_records (process_status, created_at desc);
                 """
             )
         conn.commit()
@@ -617,3 +684,149 @@ def get_notification_record(record_id: str) -> Optional[dict[str, Any]]:
         return None
 
     return _notification_record_from_row(row)
+
+
+def insert_api_process_record(record: dict[str, Any]) -> dict[str, Any]:
+    record_id = str(record.get("record_id") or uuid4())
+    request_id = str(record.get("request_id") or uuid4())
+    method = str(record.get("method") or "UNKNOWN")
+    path = str(record.get("path") or "/")
+    route_path = record.get("route_path")
+    query_string = record.get("query_string")
+    status_code = record.get("status_code")
+    process_status = str(record.get("process_status") or "success")
+    error_type = record.get("error_type")
+    error_message = record.get("error_message")
+    duration_ms = record.get("duration_ms")
+    client_host = record.get("client_host")
+    request_meta = _normalize_json_object(record.get("request_meta"))
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into api_process_records (
+                  record_id,
+                  request_id,
+                  method,
+                  path,
+                  route_path,
+                  query_string,
+                  status_code,
+                  process_status,
+                  error_type,
+                  error_message,
+                  duration_ms,
+                  client_host,
+                  request_meta,
+                  created_at
+                )
+                values (
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s::jsonb,
+                  now()
+                )
+                returning *;
+                """,
+                (
+                    record_id,
+                    request_id,
+                    method,
+                    path,
+                    route_path,
+                    query_string,
+                    status_code,
+                    process_status,
+                    error_type,
+                    error_message,
+                    duration_ms,
+                    client_host,
+                    psycopg.types.json.Jsonb(request_meta),
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+
+    if not row:
+        raise RuntimeError("Failed to insert api process record")
+
+    return _api_process_record_from_row(row)
+
+
+def list_api_process_records(
+    limit: int = 200,
+    route_path: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if route_path:
+                cur.execute(
+                    """
+                    select *
+                    from api_process_records
+                    where route_path = %s
+                    order by created_at desc
+                    limit %s;
+                    """,
+                    (route_path, limit),
+                )
+            else:
+                cur.execute(
+                    """
+                    select *
+                    from api_process_records
+                    order by created_at desc
+                    limit %s;
+                    """,
+                    (limit,),
+                )
+            rows = cur.fetchall()
+
+    return [_api_process_record_from_row(row) for row in rows]
+
+
+def api_process_stats(limit: int = 200) -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select
+                  coalesce(route_path, path) as api_path,
+                  method,
+                  count(*) as total_requests,
+                  count(*) filter (where coalesce(status_code, 200) < 400 and process_status = 'success') as success_count,
+                  count(*) filter (where coalesce(status_code, 500) >= 400 or process_status = 'error') as error_count,
+                  avg(duration_ms)::float as avg_duration_ms,
+                  max(created_at) as last_processed_at
+                from api_process_records
+                group by coalesce(route_path, path), method
+                order by total_requests desc, last_processed_at desc
+                limit %s;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+
+    return [
+        {
+            "api_path": row["api_path"],
+            "method": row["method"],
+            "total_requests": row["total_requests"],
+            "success_count": row["success_count"],
+            "error_count": row["error_count"],
+            "avg_duration_ms": row["avg_duration_ms"],
+            "last_processed_at": _serialize_dt(row.get("last_processed_at")),
+        }
+        for row in rows
+    ]

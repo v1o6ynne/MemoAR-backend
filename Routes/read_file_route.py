@@ -73,3 +73,32 @@ async def get_notification_record(record_id: str):
         "ok": True,
         "record": record,
     }
+
+
+@router.get("/api-process-records")
+async def get_api_process_records(limit: int = 200, route_path: str | None = None):
+    bounded_limit = max(1, min(limit, 500))
+
+    try:
+        return {
+            "ok": True,
+            "records": pg.list_api_process_records(
+                limit=bounded_limit,
+                route_path=route_path,
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read api process records: {e}")
+
+
+@router.get("/api-process-stats")
+async def get_api_process_stats(limit: int = 200):
+    bounded_limit = max(1, min(limit, 500))
+
+    try:
+        return {
+            "ok": True,
+            "stats": pg.api_process_stats(limit=bounded_limit),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read api process stats: {e}")
