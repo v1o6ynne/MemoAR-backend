@@ -30,7 +30,7 @@ app.include_router(write_file_router)
 app.include_router(read_file_router)
 
 # expose Storage directory
-app.mount("/Storage", StaticFiles(directory="Storage"), name="Storage")
+# app.mount("/Storage", StaticFiles(directory="Storage"), name="Storage")
 
 
 @app.get("/")
