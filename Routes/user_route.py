@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -12,6 +13,11 @@ router = APIRouter(prefix="/user", tags=["User"])
 class UserEmailRequest(BaseModel):
     user_id: str
     email: str
+
+
+class UserAppUsageRequest(BaseModel):
+    user_id: str
+    usage: dict[str, Any]
 
 
 def _validate_user_id(user_id: str) -> str:
@@ -55,4 +61,30 @@ async def get_user_email(user_id: str):
         "ok": True,
         "user_id": safe_user_id,
         "email": email,
+    }
+
+
+@router.post("/app-usage")
+async def save_user_app_usage(req: UserAppUsageRequest):
+    safe_user_id = _validate_user_id(req.user_id)
+    usage = req.usage if isinstance(req.usage, dict) else {}
+
+    pg.upsert_user_app_usage(safe_user_id, usage)
+
+    return {
+        "ok": True,
+        "user_id": safe_user_id,
+        "saved_to": "postgres:user_app_usage",
+    }
+
+
+@router.get("/app-usage/{user_id}")
+async def get_user_app_usage(user_id: str):
+    safe_user_id = _validate_user_id(user_id)
+    usage = pg.get_user_app_usage(safe_user_id)
+
+    return {
+        "ok": True,
+        "user_id": safe_user_id,
+        "usage": usage,
     }

@@ -61,6 +61,16 @@ def migrate() -> None:
             )
             cur.execute(
                 """
+                create table if not exists user_app_usage (
+                  user_id text primary key,
+                  usage jsonb not null default '{}'::jsonb,
+                  created_at timestamptz not null default now(),
+                  updated_at timestamptz not null default now()
+                );
+                """
+            )
+            cur.execute(
+                """
                 create table if not exists capture_surveys (
                   user_id text not null,
                   memory_id text not null,
@@ -159,9 +169,18 @@ def capture_survey_stats(user_id: str) -> dict[str, Any]:
         elif survey.get("isExpandedCapture") is False:
             normal_count += 1
 
+        mechanisms = survey.get("captureMechanisms")
+        if isinstance(mechanisms, list):
+            for mechanism in mechanisms:
+                if mechanism:
+                    key = str(mechanism)
+                    mechanism_counts[key] = mechanism_counts.get(key, 0) + 1
+            continue
+
         mechanism = survey.get("captureMechanism")
         if mechanism:
-            mechanism_counts[str(mechanism)] = mechanism_counts.get(str(mechanism), 0) + 1
+            key = str(mechanism)
+            mechanism_counts[key] = mechanism_counts.get(key, 0) + 1
 
     return {
         "total": len(surveys),
@@ -238,3 +257,42 @@ def get_user_email(user_id: str) -> Optional[str]:
         return None
 
     return str(email)
+
+
+def upsert_user_app_usage(user_id: str, usage: dict[str, Any]) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into user_app_usage (user_id, usage, created_at, updated_at)
+                values (%s, %s::jsonb, now(), now())
+                on conflict (user_id) do update
+                set usage = excluded.usage,
+                    updated_at = now();
+                """,
+                (user_id, psycopg.types.json.Jsonb(usage)),
+            )
+        conn.commit()
+
+
+def get_user_app_usage(user_id: str) -> Optional[dict[str, Any]]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select usage
+                from user_app_usage
+                where user_id = %s;
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        return None
+
+    usage = row.get("usage")
+    if usage is None or not isinstance(usage, dict):
+        return None
+
+    return usage
