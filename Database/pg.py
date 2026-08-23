@@ -259,19 +259,41 @@ def _migrate_notification_tables() -> None:
             cur.execute(
                 """
                 alter table notification_records
+                add column if not exists record_id text,
+                add column if not exists user_id text,
+                add column if not exists memory_id text,
+                add column if not exists record_type text not null default 'notification',
                 add column if not exists notification_status text,
+                add column if not exists notification_time timestamptz,
                 add column if not exists delivered_time timestamptz,
                 add column if not exists shown_time timestamptz,
                 add column if not exists dismissed_time timestamptz,
+                add column if not exists notification_location jsonb not null default '{}'::jsonb,
                 add column if not exists notification_mechanism jsonb not null default '{}'::jsonb,
+                add column if not exists user_location jsonb not null default '{}'::jsonb,
                 add column if not exists location_mechanism jsonb not null default '{}'::jsonb,
+                add column if not exists location_out_reason text,
                 add column if not exists memory_time_context jsonb not null default '{}'::jsonb,
                 add column if not exists memory_location_context jsonb not null default '{}'::jsonb,
+                add column if not exists clicked boolean not null default false,
+                add column if not exists click_time timestamptz,
                 add column if not exists click_action text,
+                add column if not exists click_usage jsonb not null default '{}'::jsonb,
                 add column if not exists usage_context jsonb not null default '{}'::jsonb,
                 add column if not exists interaction_events jsonb not null default '[]'::jsonb,
+                add column if not exists memory_time_relevance text,
+                add column if not exists memory_location_relevance text,
                 add column if not exists relevance_details jsonb not null default '{}'::jsonb,
-                add column if not exists notification_payload jsonb not null default '{}'::jsonb;
+                add column if not exists notification_payload jsonb not null default '{}'::jsonb,
+                add column if not exists details jsonb not null default '{}'::jsonb,
+                add column if not exists created_at timestamptz not null default now(),
+                add column if not exists updated_at timestamptz not null default now();
+                """
+            )
+            cur.execute(
+                """
+                create unique index if not exists notification_records_record_id_idx
+                on notification_records (record_id);
                 """
             )
             cur.execute(

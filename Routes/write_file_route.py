@@ -153,7 +153,13 @@ async def upsert_notification_record(req: NotificationRecordRequest):
     safe_user_id = _validate_user_id(req.user_id)
     record = req.record if isinstance(req.record, dict) else {}
 
-    saved_record = pg.upsert_notification_record(safe_user_id, record)
+    try:
+        saved_record = pg.upsert_notification_record(safe_user_id, record)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save notification record to Supabase Postgres: {e}",
+        )
 
     return {
         "ok": True,
