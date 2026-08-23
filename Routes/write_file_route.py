@@ -159,4 +159,5 @@ async def upsert_notification_record(req: NotificationRecordRequest):
         "ok": True,
         "user_id": safe_user_id,
         "record": saved_record,
+        "saved_to": "supabase:notification_records",
     }
