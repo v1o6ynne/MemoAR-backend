@@ -14,24 +14,12 @@ def _database_url() -> str:
     return url
 
 
-def _supabase_database_url() -> str:
-    url = (
-        os.getenv("SUPABASE_DATABASE_URL", "").strip()
-        or os.getenv("SUPABASE_DB_URL", "").strip()
-    )
-    if not url:
-        raise RuntimeError(
-            "SUPABASE_DATABASE_URL (or SUPABASE_DB_URL) is not set for notification_records"
-        )
-    return url
-
-
 def get_conn() -> psycopg.Connection:
     return psycopg.connect(_database_url(), row_factory=dict_row)
 
 
 def get_notification_conn() -> psycopg.Connection:
-    return psycopg.connect(_supabase_database_url(), row_factory=dict_row)
+    return get_conn()
 
 
 def _normalize_json_object(value: Any) -> dict[str, Any]:

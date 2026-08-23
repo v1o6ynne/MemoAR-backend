@@ -6,9 +6,8 @@ This is the FastAPI backend for the MemoAR project, hosted on Railway. It proces
 
 ## Database config
 
-- `DATABASE_URL`: primary backend Postgres used by `memories`, `user_app_usage`, `capture_surveys`, and `api_process_records`
-- `SUPABASE_DATABASE_URL` or `SUPABASE_DB_URL`: Supabase Postgres used specifically by `notification_records`
+- `DATABASE_URL`: backend Postgres used by `memories`, `user_app_usage`, `capture_surveys`, `api_process_records`, and `notification_records`
 
 ## Notification records
 
-`/writeData/notification-record`, `/readData/notification-records/{user_id}`, and `/readData/notification-record/{record_id}` now read and write `notification_records` through the dedicated Supabase Postgres connection above.
+`/writeData/notification-record`, `/readData/notification-records/{user_id}`, and `/readData/notification-record/{record_id}` read and write `notification_records` through the same `DATABASE_URL` connection as the other backend records.
