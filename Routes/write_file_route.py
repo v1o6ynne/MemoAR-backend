@@ -51,6 +51,13 @@ class CaptureSurveyRequest(BaseModel):
     survey: dict
 
 
+class RevisitSurveyRequest(BaseModel):
+    user_id: str
+    memory_id: str
+    revisit_event_id: str
+    survey: dict
+
+
 class NotificationRecordRequest(BaseModel):
     user_id: str
     record: dict[str, Any]
@@ -145,6 +152,37 @@ async def upsert_capture_survey(req: CaptureSurveyRequest):
         "user_id": safe_user_id,
         "memory_id": memory_id,
         "stats": stats,
+    }
+
+
+@router.post("/revisit-survey")
+async def upsert_revisit_survey(req: RevisitSurveyRequest):
+    safe_user_id = _validate_user_id(req.user_id)
+    memory_id = str(req.memory_id).strip()
+    revisit_event_id = str(req.revisit_event_id).strip()
+
+    if not memory_id:
+        raise HTTPException(status_code=400, detail="memory_id is required")
+    if not revisit_event_id:
+        raise HTTPException(status_code=400, detail="revisit_event_id is required")
+
+    survey = dict(req.survey)
+    survey["memoryID"] = memory_id
+    survey["userID"] = safe_user_id
+    survey["revisitEventID"] = revisit_event_id
+
+    pg.upsert_revisit_survey(
+        safe_user_id,
+        memory_id,
+        revisit_event_id,
+        survey,
+    )
+
+    return {
+        "ok": True,
+        "user_id": safe_user_id,
+        "memory_id": memory_id,
+        "revisit_event_id": revisit_event_id,
     }
 
 
