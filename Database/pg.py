@@ -176,6 +176,25 @@ def _migrate_primary_tables() -> None:
             )
             cur.execute(
                 """
+                create table if not exists capture_with_model_surveys (
+                  user_id text not null,
+                  memory_id text not null,
+                  survey_id text not null,
+                  survey jsonb not null,
+                  created_at timestamptz not null default now(),
+                  updated_at timestamptz not null default now(),
+                  primary key (user_id, memory_id, survey_id)
+                );
+                """
+            )
+            cur.execute(
+                """
+                create index if not exists capture_with_model_surveys_user_updated_idx
+                on capture_with_model_surveys (user_id, updated_at desc);
+                """
+            )
+            cur.execute(
+                """
                 create table if not exists api_process_records (
                   record_id text primary key,
                   request_id text not null,
@@ -405,6 +424,29 @@ def upsert_revisit_survey(
                     revisit_event_id,
                     psycopg.types.json.Jsonb(survey),
                 ),
+            )
+        conn.commit()
+
+
+def upsert_capture_with_model_survey(
+    user_id: str,
+    memory_id: str,
+    survey_id: str,
+    survey: dict[str, Any],
+) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into capture_with_model_surveys (
+                  user_id, memory_id, survey_id, survey, created_at, updated_at
+                )
+                values (%s, %s, %s, %s::jsonb, now(), now())
+                on conflict (user_id, memory_id, survey_id) do update
+                set survey = excluded.survey,
+                    updated_at = now();
+                """,
+                (user_id, memory_id, survey_id, psycopg.types.json.Jsonb(survey)),
             )
         conn.commit()
 
