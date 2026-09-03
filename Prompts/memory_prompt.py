@@ -123,6 +123,7 @@ Rules:
 - No text, watermark, props, scenery, decorations, or extra elements.
 - Apply only the visual style of the reference image: Pop Mart-inspired collectible toy aesthetic, smooth surfaces, simplified but recognizable features, polished designer toy look.
 - The reference image controls style only, not the exact subject identity.
+- The reference image controls style only, please do not extract the item from the reference image.
 
 If the entity is a person:
 - Create a toy-like Pop Mart-style figure inspired by the person in the user image.
