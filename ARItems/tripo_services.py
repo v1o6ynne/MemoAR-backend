@@ -4,6 +4,7 @@ load_dotenv()
 import shutil
 import subprocess
 from pathlib import Path
+from uuid import uuid4
 
 import os
 import requests
@@ -97,45 +98,51 @@ async def generate_model_from_image(
     
     working_dir = Path("/tmp/tripo_work")
     working_dir.mkdir(parents=True, exist_ok=True)
-    tmp_dir = working_dir / f"task_{user_id}_{os.getpid()}"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = working_dir / f"task_{uuid4().hex}"
+    tmp_dir.mkdir(parents=True, exist_ok=False)
 
-    async with TripoClient() as client:
-        
-        task_id = await client.image_to_model(
-            image=str(image_path),
-            orientation=orientation,
+    try:
+        async with TripoClient() as client:
+            task_id = await client.image_to_model(
+                image=str(image_path),
+                orientation=orientation,
+            )
+
+            print(f"🟡 [Tripo] image_to_model task_id={task_id}")
+            task = await _wait_for_task_with_retry(client, task_id, verbose=True)
+            if task.status != TaskStatus.SUCCESS:
+                raise RuntimeError(f"Image-to-model task failed: {task.status}")
+
+            convert_task_id = _submit_convert_task(task_id)
+            print(f"🟡 [Tripo] convert_model task_id={convert_task_id}")
+
+            convert_task = await _wait_for_task_with_retry(client, convert_task_id, verbose=True)
+            if convert_task.status != TaskStatus.SUCCESS:
+                raise RuntimeError(f"Convert-to-USDZ task failed: {convert_task.status}")
+
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                files = await client.download_task_models(convert_task, str(tmp_dir))
+            except FileNotFoundError:
+                print(f"⚠️ [Tripo] download directory disappeared; recreating: {tmp_dir}")
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+                files = await client.download_task_models(convert_task, str(tmp_dir))
+
+        usdz_file = _find_usdz_file(files, tmp_dir)
+        if usdz_file is None:
+            raise RuntimeError(f"No USDZ file found in output: {files}")
+
+        print(f"Uploading to Supabase: {output_usdz_path} for user {user_id}")
+        remote_url = _upload_to_supabase(
+            local_path=usdz_file,
+            content_type="model/vnd.usdz+zip",
+            object_path=output_usdz_path
         )
 
-        print(f"🟡 [Tripo] image_to_model task_id={task_id}")
-        task = await _wait_for_task_with_retry(client, task_id, verbose=True)
-        if task.status != TaskStatus.SUCCESS:
-            raise RuntimeError(f"Image-to-model task failed: {task.status}")
-
-        convert_task_id = _submit_convert_task(task_id)
-        print(f"🟡 [Tripo] convert_model task_id={convert_task_id}")
-
-        convert_task = await _wait_for_task_with_retry(client, convert_task_id, verbose=True)
-        if convert_task.status != TaskStatus.SUCCESS:
-            raise RuntimeError(f"Convert-to-USDZ task failed: {convert_task.status}")
-        
-        files = await client.download_task_models(convert_task, str(tmp_dir))
-
-    usdz_file = _find_usdz_file(files, tmp_dir)
-    if usdz_file is None:
-        raise RuntimeError(f"No USDZ file found in output: {files}")
-
-    print(f"Uploading to Supabase: {output_usdz_path} for user {user_id}")
-    remote_url = _upload_to_supabase(
-        local_path=usdz_file, 
-        content_type="model/vnd.usdz+zip",
-        object_path=output_usdz_path
-    )
-
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-
-    # this is Supabase public URL for frontend to download
-    return remote_url
+        # this is Supabase public URL for frontend to download
+        return remote_url
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _submit_convert_task(original_model_task_id: str) -> str:
