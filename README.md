@@ -6,7 +6,7 @@ This is the FastAPI backend for the MemoAR project, hosted on Railway. It proces
 
 ## Database config
 
-- `DATABASE_URL`: backend Postgres used by `memories`, `user_app_usage`, `capture_surveys`, `api_process_records`, and `notification_records`
+- `DATABASE_URL`: backend Postgres used by `memories`, `user_app_usage`, `api_process_records`, and `notification_records`
 
 ## Notification records
 

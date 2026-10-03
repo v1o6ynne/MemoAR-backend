@@ -27,19 +27,6 @@ async def get_memory_list(user_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to read memory list (postgres): {e}")
 
 
-@router.get("/capture-survey-stats/{user_id}")
-async def get_capture_survey_stats(user_id: str):
-    safe_user_id = _validate_user_id(user_id)
-    try:
-        return {
-            "ok": True,
-            "user_id": safe_user_id,
-            "stats": pg.capture_survey_stats(safe_user_id),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read capture survey stats: {e}")
-
-
 @router.get("/notification-records/{user_id}")
 async def get_notification_records(user_id: str, limit: int = 200):
     safe_user_id = _validate_user_id(user_id)
