@@ -11,3 +11,9 @@ This is the FastAPI backend for the MemoAR project, hosted on Railway. It proces
 ## Notification records
 
 `/writeData/notification-record`, `/readData/notification-records/{user_id}`, and `/readData/notification-record/{record_id}` read and write `notification_records` through the same `DATABASE_URL` connection as the other backend records.
+
+## Memory deletion
+
+`POST /writeData/delete-memory` accepts `user_id` and `memory_id`. It removes only the matching row from `memories`; stored images, models, and historical notification records are retained. Deleting an already absent row succeeds with `deleted: false`, allowing safe retries.
+
+Run the isolated deletion tests with `python -m unittest discover -s tests -v`.

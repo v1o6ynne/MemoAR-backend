@@ -305,6 +305,18 @@ def upsert_memory(user_id: str, memory_id: str, memory: dict[str, Any]) -> None:
         conn.commit()
 
 
+def delete_memory(user_id: str, memory_id: str) -> bool:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "delete from memories where user_id = %s and memory_id = %s;",
+                (user_id, memory_id),
+            )
+            deleted = cur.rowcount > 0
+        conn.commit()
+    return deleted
+
+
 def list_memories(user_id: str, limit: int = 200) -> list[dict[str, Any]]:
     with get_conn() as conn:
         with conn.cursor() as cur:

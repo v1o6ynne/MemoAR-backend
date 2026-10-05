@@ -45,6 +45,11 @@ class UpsertMemoryRequest(BaseModel):
     memory: dict
 
 
+class DeleteMemoryRequest(BaseModel):
+    user_id: str
+    memory_id: str
+
+
 class NotificationRecordRequest(BaseModel):
     user_id: str
     record: dict[str, Any]
@@ -105,6 +110,23 @@ async def upsert_memory(req: UpsertMemoryRequest):
         "memory_id": memory_id,
         "count": None,
         "saved_to": "postgres:memories"
+    }
+
+
+@router.post("/delete-memory")
+async def delete_memory(req: DeleteMemoryRequest):
+    safe_user_id = _validate_user_id(req.user_id)
+    memory_id = req.memory_id.strip()
+    if not memory_id:
+        raise HTTPException(status_code=400, detail="memory_id is required")
+
+    # An already absent record is also a successful deletion, so retries are safe.
+    deleted = pg.delete_memory(safe_user_id, memory_id)
+    return {
+        "ok": True,
+        "user_id": safe_user_id,
+        "memory_id": memory_id,
+        "deleted": deleted,
     }
 
 
